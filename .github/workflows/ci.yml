@@ -28,3 +28,6 @@ jobs:
       - run: python -m banditlab demo > /tmp/demo.json
       - run: python -m banditlab solve examples/two-arms.json > /tmp/solve.json
       - run: PYTHONPATH=. python examples/render_audit.py --check
+      - run: python -m banditlab policy-demo > /tmp/policy-demo.json
+      - run: python -m banditlab audit examples/policy.json > /tmp/policy.json
+      - run: PYTHONPATH=. python examples/render_policy_audit.py --check
