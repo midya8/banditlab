@@ -1,5 +1,5 @@
 """Exact expected-reward curves and a horizon-three exploration witness."""
-import argparse,html,json
+import argparse,html,json,base64,zlib
 from fractions import Fraction as F
 from pathlib import Path
 from banditlab.demo import demo
@@ -7,7 +7,7 @@ from banditlab.demo import demo
 
 def render(d):
     if d!=demo():raise ValueError('requires complete unchanged bandit demo')
-    out=['<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="750" viewBox="0 0 1120 750">','<rect width="1120" height="750" fill="#101827"/>','<style>text{font-family:Arial,sans-serif;fill:#e7edf8}</style>','<metadata>'+html.escape(json.dumps(d,sort_keys=True))+'</metadata>']
+    out=['<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="750" viewBox="0 0 1120 750">','<rect width="1120" height="750" fill="#101827"/>','<style>text{font-family:Arial,sans-serif;fill:#e7edf8}</style>','<metadata data-encoding="zlib+base64">'+base64.b64encode(zlib.compress(json.dumps(d,sort_keys=True,separators=(',',':')).encode())).decode()+'</metadata>']
     def text(x,y,s,size=16,color='#e7edf8'):
         out.append(f'<text x="{x}" y="{y}" font-size="{size}" style="fill:{color}">'+html.escape(s)+'</text>')
     def coord(x):return format(float(x),'.9f').rstrip('0').rstrip('.')
