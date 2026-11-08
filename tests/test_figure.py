@@ -1,4 +1,4 @@
-import copy,json,unittest,xml.etree.ElementTree as ET
+import copy,json,unittest,base64,zlib,xml.etree.ElementTree as ET
 from fractions import Fraction as F
 from pathlib import Path
 from banditlab.demo import demo
@@ -13,7 +13,7 @@ class FigureTests(unittest.TestCase):
             for (x,y),(h,v) in zip(coords,expected):self.assertAlmostEqual(x,90+70*h,places=8);self.assertAlmostEqual(y,float(520-60*v),places=8)
         self.assertIn('stroke-dasharray',curves['clairvoyant'].attrib)
     def test_full_metadata_and_tie_scope(self):
-        root=ET.fromstring(render(demo()));self.assertEqual(json.loads(root.find('s:metadata',NS).text),demo());text=' '.join(root.itertext());self.assertIn('BOTH first arms tie',text);self.assertIn('not future reward draws',text)
+        root=ET.fromstring(render(demo()));self.assertEqual(json.loads(zlib.decompress(base64.b64decode(root.find('s:metadata',NS).text))),demo());text=' '.join(root.itertext());self.assertIn('BOTH first arms tie',text);self.assertIn('not future reward draws',text)
     def test_regeneration(self):self.assertEqual((Path(__file__).resolve().parents[1]/'assets'/'bandit-audit.svg').read_text(),render(demo()))
     def test_reject_undisplayed_state_or_cdf_change(self):
         for location in ['state','cdf']:
