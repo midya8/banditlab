@@ -1,4 +1,9 @@
-# Design and verification
+# BanditLab method notes
+
+This document explains the posterior state, Bellman recursion, rate-informed
+upper bound and forward policy audit used by the code. All results are exact
+under the supplied independent stationary Beta-Bernoulli model. They do not
+check whether that model fits a real decision problem.
 
 ## Information state and Bellman induction
 
@@ -46,7 +51,7 @@ Write pi(a|s) for a complete randomized action kernel, P(r,s'|s,a) for the poste
 
 Independently evaluate V_pi(s) backward by averaging reward plus V_pi(child) under pi and P. Check that its root value agrees exactly with the forward reward sum. All zero-mass states keep their conditional policy values and complete kernels, but have zero reward/loss contribution. A custom kernel must cover all decision states, not only those it visits; terminal rows are empty. This supports information-state Markov randomization with independent conditional draws, not a user-supplied policy with hidden history or correlated private randomness. The solver's optimum already dominates such randomization because each weighted first-action value cannot exceed its maximum.
 
-Define g(s) = V_star(s) - sum_a pi(a|s) Q_star(s,a). Bellman optimality makes every g(s) nonnegative. Substituting Q_star as expected immediate reward plus next V_star gives expected g at depth t as expected V_star at depth t minus expected reward at depth t minus expected V_star at depth t+1. Sum over the finite horizon. Every interior V_star term cancels, terminal V_star is zero, and root occupancy is one. Thus sum_s d(s) g(s) = V_star(root) - V_pi(root). This is a policy performance-difference identity under the stated prior, not a causal attribution or frequentist regret guarantee. It is important that g uses optimal-continuation Q, not the current policy's continuation Q. The latter would give zero on-policy Bellman residual even for a bad policy. Subtracting the same policy value from the clairvoyant bound also gives Bayes regret = optimal Bayes regret + this loss.
+Define g(s) = V_star(s) - sum_a pi(a|s) Q_star(s,a). Bellman optimality makes every g(s) nonnegative. Substituting Q_star as expected immediate reward plus next V_star gives expected g at depth t as expected V_star at depth t minus expected reward at depth t minus expected V_star at depth t+1. Sum over the finite horizon. Every interior V_star term cancels, terminal V_star is zero, and root occupancy is one. Thus sum_s d(s) g(s) = V_star(root) - V_pi(root). This is a policy performance-difference identity under the stated prior, not a causal attribution or frequentist regret guarantee. The gap must use optimal-continuation Q, not the current policy's continuation Q. The latter would give zero on-policy Bellman residual even for a bad policy. Subtracting the same policy value from the clairvoyant bound also gives Bayes regret = optimal Bayes regret + this loss.
 
 The three-pull fixture's optimal/greedy/fixed positive-mass counts are 14/14/10 out of the full 35-state graph. Greedy loses 1/36 at the first decision and zero at later occupied decisions. Fixed loses 1/36 + 8/297 + 1/99 = 7/108. Expected arm-0 pulls are 11/6, 2/3 and zero. These numbers are consequences of this specified model and each policy's own occupancy; they do not establish an empirical causal mechanism or universal exploration ranking.
 
