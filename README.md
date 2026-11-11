@@ -1,6 +1,13 @@
 # BanditLab
 
-Exact finite-budget Bayesian bandit planning from scratch. Independent Beta-Bernoulli arms, posterior-state Bellman backups, complete action values and ties, a fully updating greedy baseline, and an exact clairvoyant prior upper bound. Dependency-free Python 3.10+, strict JSON CLI and rational results.
+A small Bayesian bandit planner that answers a concrete question: when is it worth
+trying an arm with a lower current success rate?
+
+Supply independent Beta-Bernoulli priors and a pull budget. BanditLab returns
+exact expected rewards, every action value and tie, and the complete posterior
+state graph. Compare the optimal policy with an updating greedy policy, a fixed
+arm, and an upper bound that knows the latent rates. Python 3.10+, standard
+library only; JSON fractions are `[numerator, denominator]`.
 
 ![Exact expected reward over equal pull budgets, with a three-pull exploration witness](assets/bandit-audit.svg)
 
@@ -17,7 +24,7 @@ With one pull, choose arm 1. With two pulls, both first arms tie and the adaptiv
 | Best fixed-arm commitment | 5/3 |
 | Knows the latent rates beforehand | 2 (upper bound) |
 
-The adaptive gain over greedy is exactly `1/36`. Greedy is **not frozen**: it updates its posterior after every outcome and picks a new highest-mean arm at every remaining decision. The fixed baseline maximizes over all fixed action sequences implicitly: without using outcomes, every pull should go to an arm with the best prior mean. The clairvoyant comparator has extra parameter information and is not an available learning algorithm. It knows the rates, not future realized reward draws.
+The adaptive gain over greedy is exactly `1/36`. Greedy updates its posterior after every outcome and picks a new highest-mean arm at every remaining decision. The fixed baseline maximizes over all fixed action sequences implicitly: without using outcomes, every pull should go to an arm with the best prior mean. The clairvoyant comparator has extra parameter information and is not an available learning algorithm. It knows the rates, not future realized reward draws.
 
 These are prescribed, exact supplied-prior examples, not simulated trials, development/test accuracy, confidence intervals or a universal empirical ranking of bandit algorithms. The six evaluated budgets are 1, 2, 3, 4, 6 and 8; the SVG's lines connect those values plus the known zero-budget origin.
 
@@ -30,11 +37,13 @@ python -m pip install .
 banditlab demo
 ```
 
-## Follow a policy forward and account for every lost reward
+## Where a policy loses expected reward
 
 ![Exact arm-choice probability and occupancy-weighted Bellman-gap decomposition](assets/policy-audit.svg)
 
-`audit_policy` evaluates `optimal`, `greedy`, `fixed`, or a complete randomized policy kernel on the solver's information-state IDs. It propagates exact probability mass forward, separately from the backward conditional policy values. Every state reports occupancy, action probabilities, reward contribution, all action/outcome flows, the optimal Bellman gap, and its occupancy-weighted contribution. Every pull reports arm-choice probabilities, success/failure masses and expected reward. Terminal mass is one, including at horizon zero.
+`audit_policy` evaluates `optimal`, `greedy`, `fixed`, or a complete randomized policy kernel on the solver's information-state IDs. It propagates exact probability mass forward, separately from the backward conditional policy values. Every state reports occupancy, action probabilities, reward contribution, all action/outcome flows, the optimal Bellman gap, and its occupancy-weighted contribution.
+
+Every pull reports arm-choice probabilities, success/failure masses and expected reward. Terminal mass is one, including at horizon zero.
 
 For the three-pull example:
 
@@ -44,7 +53,7 @@ For the three-pull example:
 | Updating greedy | 2/3 | 14/35 | 1/36 |
 | Fixed arm 1 | 0 | 10/35 | 7/108 |
 
-The greedy policy's entire `1/36` loss is its first-decision optimal Bellman gap; its later occupied decisions have zero gap. The fixed policy's contributions are `1/36`, `8/297` and `1/99`, which sum to `7/108`. This is a finite-horizon performance-difference identity, **not a causal experiment**. Each gap compares the current randomized action to optimal continuation, rather than using that policy's continuation value. Telescoping over its own occupancy gives `optimal_value - expected_reward = sum(weighted_optimal_bellman_gap)`. Total clairvoyant Bayes regret also equals optimal Bayes regret plus this policy loss.
+The greedy policy's entire `1/36` loss is its first-decision optimal Bellman gap; its later occupied decisions have zero gap. The fixed policy's contributions are `1/36`, `8/297` and `1/99`, which sum to `7/108`. This is a finite-horizon performance-difference identity, not a causal experiment. Each gap compares the current randomized action to optimal continuation, rather than using that policy's continuation value. Telescoping over its own occupancy gives `optimal_value - expected_reward = sum(weighted_optimal_bellman_gap)`. Total clairvoyant Bayes regret also equals optimal Bayes regret plus this policy loss.
 
 ```python
 from banditlab import solve, audit_policy
@@ -60,7 +69,11 @@ mixed = audit_policy(plan["priors"], horizon=3, policy=kernel)
 assert mixed["terminal_probability_mass"] == [1, 1]
 ```
 
-A custom policy is a list indexed by **every** returned state ID: each decision row has K rational `[numerator,positive_denominator]` probabilities summing exactly to one, and each terminal row is `[]`. Entries must be exact non-boolean integers with numerator 0..1,000,000 and denominator 1..1,000,000. Unreachable rows are still required and validated. Randomization is independent conditional on the current information state; hidden private memory, correlated coins across time and arbitrary history-dependent policy input are not supported. Named policies choose the first index in a tie; `fixed` commits to the best **initial** mean arm. Zero occupancy does not erase a state's conditional value. Occupancy is summed history probability, not a count of histories or the posterior probability of an unknown environment.
+A custom policy is a list indexed by every returned state ID: each decision row has K rational `[numerator,positive_denominator]` probabilities summing exactly to one, and each terminal row is `[]`. Entries must be exact non-boolean integers with numerator 0..1,000,000 and denominator 1..1,000,000. Unreachable rows are still required and validated.
+
+Randomization is independent conditional on the current information state; hidden private memory, correlated coins across time and arbitrary history-dependent policy input are not supported.
+
+Named policies choose the first index in a tie; `fixed` commits to the best **initial** mean arm. Zero occupancy does not erase a state's conditional value. Occupancy is summed history probability, not a count of histories or the posterior probability of an unknown environment.
 
 ```sh
 python -m banditlab policy-demo
@@ -70,7 +83,7 @@ PYTHONPATH=. python examples/render_policy_audit.py --check
 
 The audit CLI uses exactly `version`, `priors`, `horizon`, and `policy`; it shares the strict JSON, size and state-budget rules of `solve`. It builds one solution and refuses before solving if the state preflight fails. Its complete result and full zero-mass-state details are compressed into the second SVG's metadata with the same lossless format described below.
 
-## Exact learning-state planning, not a sampled rollout
+## The planning recursion
 
 For arm `i`, a posterior `Beta(alpha_i,beta_i)` predicts success probability `p_i=alpha_i/(alpha_i+beta_i)`. A success increments alpha; a failure increments beta. Other arms do not change. The finite-horizon recursion is:
 
@@ -81,7 +94,9 @@ Q(h, posterior, i) = p_i * (1 + V(h-1, posterior_after_success_i))
 V(h, posterior) = max_i Q(h, posterior, i)
 ```
 
-The implementation builds every reachable posterior/time state bottom-up, merges histories with identical sufficient counts, and returns the entire graph. Every state records posterior parameters/means, remaining budget, optimal Q-values, **all maximizing arms**, selected first-index tie, greedy action, all forced-first-action/greedy-continuation values, greedy total value, best fixed-arm value, and both outcome probabilities/child IDs for every arm. Terminal states have zero value, no action and no outgoing branches. At budget zero, root action and arm tie lists are empty.
+The implementation builds every reachable posterior/time state bottom-up, merges histories with identical sufficient counts, and returns the entire graph.
+
+Every state records posterior parameters/means, remaining budget, optimal Q-values, all maximizing arms, selected first-index tie, greedy action, all forced-first-action/greedy-continuation values, greedy total value, best fixed-arm value, and both outcome probabilities/child IDs for every arm. Terminal states have zero value, no action and no outgoing branches. At budget zero, root action and arm tie lists are empty.
 
 The state table covers states reachable under **any** action/outcome history. It is not a list of states visited by the selected policy, an occupancy distribution, a simulated transcript or the full unmerged policy-tree count. Child IDs precede parent IDs; `root_state_id` identifies the last record. Exact fractions serialize as `[numerator,positive_denominator]`.
 
@@ -94,7 +109,7 @@ assert result['adaptive_gain_over_greedy'] == [1,36]
 root = result['states'][result['root_state_id']]
 ```
 
-## An exact information-advantaged upper bound
+## What knowing the rates would be worth
 
 For independent latent arm rates with CDFs `F_i`, the maximum rate has CDF `product_i F_i(x)`. Integer Beta shapes make each CDF a finite rational polynomial. BanditLab integrates it exactly:
 
@@ -104,17 +119,21 @@ clairvoyant expected reward = horizon * E[max_i theta_i]
 Bayes regret = clairvoyant expected reward - policy prior expected reward
 ```
 
-The output includes the product-CDF polynomial in increasing-power coefficient order, exact best-rate expectation, reward upper bound and Bayes regret for optimal, greedy and fixed policies. These are expectations under the supplied independent prior, not realized regret after one outcome sequence, a fixed-environment frequentist regret guarantee, a confidence bound or access to future reward noise. With one arm, all policies match and Bayes regret is zero. In the demo, `E[max(theta_0,theta_1)]=2/3`; at three pulls the optimal Bayes regret is `29/108`.
+The output includes the product-CDF polynomial in increasing-power coefficient order, exact best-rate expectation, reward upper bound and Bayes regret for optimal, greedy and fixed policies. These are expectations under the supplied independent prior, not realized regret after one outcome sequence, a fixed-environment frequentist regret guarantee, a confidence bound or access to future reward noise.
 
-## Strict inputs and exact state preflight
+With one arm, all policies match and Bayes regret is zero. In the demo, `E[max(theta_0,theta_1)]=2/3`; at three pulls the optimal Bayes regret is `29/108`.
+
+## Input limits
 
 CLI input has exactly `{"version":1,"priors":[[alpha,beta],...],"horizon":integer}`. Priors must contain 1..3 arms. Every initial alpha/beta is an integer in 1..16. Horizon is an integer in 0..12. Floats, booleans, strings, malformed shapes, unknown/duplicate keys and invalid ranges are rejected. CLI files are capped at 64 KiB. Internal posterior parameters may grow beyond 16; the limit applies to supplied starting parameters.
 
-For K arms and horizon H, there are exactly `binomial(H+2*K,2*K)` posterior/time states reachable under some action history. Success/failure increments are weak compositions of each elapsed budget across 2*K categories. `state_limit` defaults to 4,096 and may be set to 1..20,000. The full exact count is checked **before state generation or polynomial integration**. Refusal returns no partial plan. Two arms at horizon 12 need 1,820 states; three arms at horizon 8 need 3,003. Three arms at horizon 12 need 18,564 and exceed the default limit. There are `2*K*decision_states` directed action/outcome edges.
+For K arms and horizon H, there are exactly `binomial(H+2*K,2*K)` posterior/time states reachable under some action history. Success/failure increments are weak compositions of each elapsed budget across 2*K categories. `state_limit` defaults to 4,096 and may be set to 1..20,000.
+
+The full exact count is checked before state generation or polynomial integration. Refusal returns no partial plan. Two arms at horizon 12 need 1,820 states; three arms at horizon 8 need 3,003. Three arms at horizon 12 need 18,564 and exceed the default limit. There are `2*K*decision_states` directed action/outcome edges.
 
 These counts do not bound Fraction bit lengths, serialized bytes, arithmetic operations, wall time or RAM. No random seed, network, paid API, model download, GPU or dataset is needed. A six-module wheel runs outside the source checkout and reproduces the demo exactly.
 
-## Independent checks
+## Tests
 
 34 tests include:
 
@@ -127,8 +146,10 @@ These counts do not bound Fraction bit lengths, serialized bytes, arithmetic ope
 - Eleven policy-audit tests add 144 independent named-policy history references across 16 prior pairs and three horizons. Joint action/outcome-prefix enumeration integrates latent Beta moments directly, not production edges or predictive probabilities. Two- and three-arm randomized kernels get separate joint-history checks. Every flow, conditional value, gap, probability conservation and regret decomposition is checked, with zero-mass, horizon-zero, tie, malformed-kernel, CLI, preflight and isolation cases.
 - Four more SVG tests check all 18 bars and both metric scales, complete audit metadata, regeneration and rejection of an undisplayed zero-mass conditional-value change.
 
-## Attribution and limits
+## Sources and limits
 
-The Bayesian information-state formulation, Beta-Bernoulli predictive mean, Bellman objective and parameter-informed comparison follow [Min, Maglaras and Moallemi, *Thompson Sampling with Information Relaxation Penalties*, Sections 2 and 3](https://ar5iv.labs.arxiv.org/html/1902.04251v1). BanditLab implements the small full finite-state Bellman problem, **not that paper's IRS algorithms**, Thompson sampling, Gittins indices or a large-scale bandit method. The exact state enumerator, schema, CDF integration, code, independent oracles, fixtures and figure are original; no external code or dataset is copied. [DESIGN.md](DESIGN.md) gives the derivations. MIT licensed.
+The Bayesian information-state formulation, Beta-Bernoulli predictive mean, Bellman objective and parameter-informed comparison follow [Min, Maglaras and Moallemi, *Thompson Sampling with Information Relaxation Penalties*, Sections 2 and 3](https://ar5iv.labs.arxiv.org/html/1902.04251v1). BanditLab implements the small full finite-state Bellman problem, **not that paper's IRS algorithms**, Thompson sampling, Gittins indices or a large-scale bandit method.
+
+The exact state enumerator, schema, CDF integration, code, independent oracles, fixtures and figure are original; no external code or dataset is copied. [DESIGN.md](DESIGN.md) gives the derivations. MIT licensed.
 
 The guarantee depends on correct independent stationary Beta priors and conditionally IID unit Bernoulli rewards. No correlated arms, changing rates, contextual features, costs, delayed feedback, continuous rewards, infinite horizon, empirical confidence/coverage or real-world decision-safety claim is made. Exact arithmetic does not make an assumed prior true.
