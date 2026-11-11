@@ -44,7 +44,7 @@ def _clairvoyant_mean(priors):
 def solve(priors,*,horizon=4,state_limit=4096):
     planned=validate(priors,horizon,state_limit);k=len(priors);table=[];lookup={};edges=0
     # All weak compositions of elapsed pulls over 2*K success/failure counts.
-    # Every such state is reachable under SOME action/outcome history, not necessarily the chosen policy.
+    # Each state is reachable under some action/outcome history, not necessarily the selected policy.
     for elapsed in range(horizon,-1,-1):
         left=horizon-elapsed
         for inc in _compositions(elapsed,2*k):
